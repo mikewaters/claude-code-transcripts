@@ -78,9 +78,20 @@ def extract_text_from_content(content):
 # Module-level variable for GitHub repo (set by generate_html)
 _github_repo = None
 
+MAX_TITLE_LENGTH = 60
+
 # API constants
 API_BASE_URL = "https://api.anthropic.com/v1"
 ANTHROPIC_VERSION = "2023-06-01"
+
+
+def _sanitize_title(title):
+    """Collapse whitespace and truncate a title for use in HTML headings."""
+    # Collapse newlines and runs of whitespace to a single space
+    title = " ".join(title.split())
+    if len(title) > MAX_TITLE_LENGTH:
+        title = title[: MAX_TITLE_LENGTH - 3] + "..."
+    return title
 
 
 def get_session_summary(filepath, max_length=200):
@@ -985,7 +996,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .container { max-width: 800px; margin: 0 auto; }
 h1 { font-size: 1.5rem; margin-bottom: 24px; padding-bottom: 8px; border-bottom: 2px solid var(--user-border); }
 .header-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 2px solid var(--user-border); padding-bottom: 8px; margin-bottom: 24px; }
-.header-row h1 { border-bottom: none; padding-bottom: 0; margin-bottom: 0; flex: 1; min-width: 200px; }
+.header-row h1 { border-bottom: none; padding-bottom: 0; margin-bottom: 0; flex: 1; min-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .message { margin-bottom: 16px; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .message.user { background: var(--user-bg); border-left: 4px solid var(--user-border); }
 .message.assistant { background: var(--card-bg); border-left: 4px solid var(--assistant-border); }
@@ -1325,7 +1336,7 @@ def generate_html(json_path, output_dir, github_repo=None, title=None):
     global _github_repo
     _github_repo = github_repo
 
-    title = title or "Claude Code transcript"
+    title = _sanitize_title(title) if title else "Claude Code transcript"
 
     conversations = []
     current_conv = None
@@ -1832,7 +1843,7 @@ def generate_html_from_session_data(
     global _github_repo
     _github_repo = github_repo
 
-    title = title or "Claude Code transcript"
+    title = _sanitize_title(title) if title else "Claude Code transcript"
 
     conversations = []
     current_conv = None

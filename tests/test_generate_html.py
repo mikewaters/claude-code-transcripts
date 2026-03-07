@@ -201,6 +201,38 @@ class TestGenerateHtmlTitle:
             # The dangerous characters are properly entity-encoded
             assert "&lt;/title&gt;&lt;script&gt;" in html
 
+    def test_long_title_truncated(self, output_dir):
+        """Test that long titles are truncated to avoid pushing the search box off-page.
+
+        The index.html header-row is an 800px flex container shared between
+        the h1 title and the search box (~224px). At 1.5rem, titles over ~40
+        characters start wrapping. Multi-line session summaries (e.g. a prompt
+        starting with '# Role\\nYou are an expert...') are especially problematic.
+        Titles are truncated to 60 chars with ellipsis to fit comfortably.
+        """
+        fixture_path = Path(__file__).parent / "sample_session.json"
+
+        long_title = "A" * 100
+        generate_html(fixture_path, output_dir, title=long_title)
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        # Should be truncated, not the full 100-char string
+        assert "A" * 100 not in index_html
+        assert "A" * 57 + "..." in index_html
+
+    def test_multiline_title_collapsed_to_single_line(self, output_dir):
+        """Test that newlines in titles are replaced so the h1 stays on one line."""
+        fixture_path = Path(__file__).parent / "sample_session.json"
+
+        multiline_title = "# Role\nYou are an expert Software Architect"
+        generate_html(fixture_path, output_dir, title=multiline_title)
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        # Newlines should not appear in the h1
+        assert "# Role\nYou are" not in index_html
+        # Should be collapsed to a single line with space separator
+        assert "# Role You are" in index_html
+
 
 class TestRenderFunctions:
     """Tests for individual render functions."""
