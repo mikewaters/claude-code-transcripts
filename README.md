@@ -55,6 +55,7 @@ All commands support these options:
 - `--open` - open the generated `index.html` in your default browser (default if no `-o` specified)
 - `--gist` - upload the generated HTML files to a GitHub Gist and output a preview URL
 - `--json` - include the original session file in the output directory
+- `--use-session-name` - use the session name as the page title (see below)
 
 The generated output includes:
 - `index.html` - an index page with a timeline of prompts and commits
@@ -194,6 +195,7 @@ Options:
 - `--dry-run` - show what would be converted without creating files
 - `--open` - open the generated archive in your default browser
 - `-q, --quiet` - suppress all output except errors
+- `--use-session-name` - use each session's name as its page title
 
 Examples:
 
@@ -210,6 +212,20 @@ claude-code-transcripts all -o ./my-archive
 # Include agent sessions
 claude-code-transcripts all --include-agents
 ```
+
+### Using session names as page titles
+
+By default, generated transcripts use "Claude Code transcript" as the page title and heading. Use `--use-session-name` to replace this with the session's name:
+
+```bash
+claude-code-transcripts local --use-session-name
+claude-code-transcripts json session.jsonl --use-session-name
+claude-code-transcripts all --use-session-name
+```
+
+For local and JSON sessions, the title is derived from the first user message in the session. For web sessions, the API-provided session title is used.
+
+This is particularly useful with the `all` command, where each session in the archive gets its own descriptive title rather than a generic heading.
 
 ## Development
 

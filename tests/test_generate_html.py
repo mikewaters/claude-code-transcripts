@@ -118,6 +118,56 @@ class TestGenerateHtml:
         assert (output_dir / "page-001.html").exists()
 
 
+class TestGenerateHtmlTitle:
+    """Tests for the title parameter in generate_html."""
+
+    def test_default_title_without_param(self, output_dir):
+        """Test that default title is used when no title param is provided."""
+        fixture_path = Path(__file__).parent / "sample_session.json"
+        generate_html(fixture_path, output_dir)
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        assert "<title>Claude Code transcript - Index</title>" in index_html
+        assert "<h1>Claude Code transcript</h1>" in index_html
+
+    def test_title_none_uses_default(self, output_dir):
+        """Test that title=None produces the same output as no title."""
+        fixture_path = Path(__file__).parent / "sample_session.json"
+        generate_html(fixture_path, output_dir, title=None)
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        assert "<title>Claude Code transcript - Index</title>" in index_html
+        assert "<h1>Claude Code transcript</h1>" in index_html
+
+    def test_custom_title_in_index(self, output_dir):
+        """Test that a custom title appears in the index page."""
+        fixture_path = Path(__file__).parent / "sample_session.json"
+        generate_html(fixture_path, output_dir, title="Fix auth bug")
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        assert "<title>Fix auth bug - Index</title>" in index_html
+        assert "<h1>Fix auth bug</h1>" in index_html
+
+    def test_custom_title_in_page(self, output_dir):
+        """Test that a custom title appears in transcript pages."""
+        fixture_path = Path(__file__).parent / "sample_session.json"
+        generate_html(fixture_path, output_dir, title="Fix auth bug")
+
+        page_html = (output_dir / "page-001.html").read_text(encoding="utf-8")
+        assert "<title>Fix auth bug - page 1</title>" in page_html
+        assert "Fix auth bug</a> - page 1/" in page_html
+
+    def test_title_html_escaped(self, output_dir):
+        """Test that title is HTML-escaped to prevent XSS."""
+        fixture_path = Path(__file__).parent / "sample_session.json"
+        generate_html(fixture_path, output_dir, title='<script>alert("xss")</script>')
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        # Jinja autoescape should escape the script tag
+        assert "<script>alert" not in index_html
+        assert "&lt;script&gt;" in index_html
+
+
 class TestRenderFunctions:
     """Tests for individual render functions."""
 

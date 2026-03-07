@@ -299,6 +299,34 @@ class TestGenerateBatchHtml:
             assert "Simulated failure" in stats["failed_sessions"][0]["error"]
 
 
+class TestGenerateBatchHtmlTitle:
+    """Tests for the use_session_name parameter in generate_batch_html."""
+
+    def test_batch_without_use_session_name(self, mock_projects_dir, output_dir):
+        """Test that batch mode uses default title when flag is not set."""
+        generate_batch_html(mock_projects_dir, output_dir)
+
+        # Find a generated session index.html
+        project_a_dir = output_dir / "project-a"
+        session_dirs = [d for d in project_a_dir.iterdir() if d.is_dir()]
+        assert len(session_dirs) > 0
+
+        index_html = (session_dirs[0] / "index.html").read_text(encoding="utf-8")
+        assert "Claude Code transcript" in index_html
+
+    def test_batch_with_use_session_name(self, mock_projects_dir, output_dir):
+        """Test that batch mode uses session summary as title when flag is set."""
+        generate_batch_html(mock_projects_dir, output_dir, use_session_name=True)
+
+        # Find abc123 session (its first user message is "Hello from project A")
+        abc_dir = output_dir / "project-a" / "abc123"
+        assert abc_dir.exists()
+
+        index_html = (abc_dir / "index.html").read_text(encoding="utf-8")
+        assert "Hello from project A" in index_html
+        assert "<h1>Hello from project A</h1>" in index_html
+
+
 class TestAllCommand:
     """Tests for the all CLI command."""
 
@@ -390,6 +418,29 @@ class TestAllCommand:
         assert "Scanning" not in result.output
         assert "Processed" not in result.output
         assert "Generating" not in result.output
+
+    def test_all_use_session_name_flag(self, mock_projects_dir, output_dir):
+        """Test --use-session-name flag sets session summaries as titles."""
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "all",
+                "--source",
+                str(mock_projects_dir),
+                "--output",
+                str(output_dir),
+                "--use-session-name",
+            ],
+        )
+
+        assert result.exit_code == 0
+
+        # Check that a session has its summary as the title
+        abc_dir = output_dir / "project-a" / "abc123"
+        assert abc_dir.exists()
+        index_html = (abc_dir / "index.html").read_text(encoding="utf-8")
+        assert "Hello from project A" in index_html
 
     def test_all_quiet_with_dry_run(self, mock_projects_dir, output_dir):
         """Test --quiet flag works with --dry-run."""
