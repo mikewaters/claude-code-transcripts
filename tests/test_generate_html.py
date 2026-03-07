@@ -167,6 +167,40 @@ class TestGenerateHtmlTitle:
         assert "<script>alert" not in index_html
         assert "&lt;script&gt;" in index_html
 
+    def test_title_xss_prevention(self, output_dir):
+        """Verify that malicious title content cannot achieve XSS.
+
+        The title variable is rendered in three HTML contexts:
+          1. <title>{{ title }} - Index</title>  (title element)
+          2. <h1>{{ title }}</h1>                 (heading element)
+          3. <a ...>{{ title }}</a>               (anchor in heading)
+
+        The primary attack vector for <title> is tag breakout: injecting
+        '</title><script>...' to escape into the document body. For <h1>
+        and <a>, it's direct <script> or event-handler injection.
+
+        Both are mitigated by Jinja2's autoescape=True on our Environment,
+        which escapes &, <, >, ", and ' in all {{ }} expressions. The title
+        variable uses plain {{ title }} with no |safe filter and is always
+        a plain str (never a Markup instance), so autoescape is fully active.
+        """
+        fixture_path = Path(__file__).parent / "sample_session.json"
+
+        # Attempt both a title-tag breakout and a direct script injection
+        malicious_title = '</title><script>alert("xss")</script>'
+        generate_html(fixture_path, output_dir, title=malicious_title)
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        page_html = (output_dir / "page-001.html").read_text(encoding="utf-8")
+
+        for html in (index_html, page_html):
+            # No raw script tag anywhere in the output
+            assert "<script>alert" not in html
+            # The breakout attempt is escaped, not interpreted as a closing tag
+            assert "</title><script>" not in html
+            # The dangerous characters are properly entity-encoded
+            assert "&lt;/title&gt;&lt;script&gt;" in html
+
 
 class TestRenderFunctions:
     """Tests for individual render functions."""
