@@ -78,7 +78,7 @@ def extract_text_from_content(content):
 # Module-level variable for GitHub repo (set by generate_html)
 _github_repo = None
 
-MAX_TITLE_LENGTH = 60
+MAX_TITLE_LENGTH = 48
 
 # API constants
 API_BASE_URL = "https://api.anthropic.com/v1"

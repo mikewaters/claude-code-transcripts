@@ -208,7 +208,7 @@ class TestGenerateHtmlTitle:
         the h1 title and the search box (~224px). At 1.5rem, titles over ~40
         characters start wrapping. Multi-line session summaries (e.g. a prompt
         starting with '# Role\\nYou are an expert...') are especially problematic.
-        Titles are truncated to 60 chars with ellipsis to fit comfortably.
+        Titles are truncated to 48 chars with ellipsis to fit comfortably.
         """
         fixture_path = Path(__file__).parent / "sample_session.json"
 
@@ -218,7 +218,7 @@ class TestGenerateHtmlTitle:
         index_html = (output_dir / "index.html").read_text(encoding="utf-8")
         # Should be truncated, not the full 100-char string
         assert "A" * 100 not in index_html
-        assert "A" * 57 + "..." in index_html
+        assert "A" * 45 + "..." in index_html
 
     def test_multiline_title_collapsed_to_single_line(self, output_dir):
         """Test that newlines in titles are replaced so the h1 stays on one line."""
