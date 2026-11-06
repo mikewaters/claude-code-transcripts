@@ -118,6 +118,122 @@ class TestGenerateHtml:
         assert (output_dir / "page-001.html").exists()
 
 
+class TestGenerateHtmlTitle:
+    """Tests for the title parameter in generate_html."""
+
+    def test_default_title_without_param(self, output_dir):
+        """Test that default title is used when no title param is provided."""
+        fixture_path = Path(__file__).parent / "sample_session.json"
+        generate_html(fixture_path, output_dir)
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        assert "<title>Claude Code transcript - Index</title>" in index_html
+        assert "<h1>Claude Code transcript</h1>" in index_html
+
+    def test_title_none_uses_default(self, output_dir):
+        """Test that title=None produces the same output as no title."""
+        fixture_path = Path(__file__).parent / "sample_session.json"
+        generate_html(fixture_path, output_dir, title=None)
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        assert "<title>Claude Code transcript - Index</title>" in index_html
+        assert "<h1>Claude Code transcript</h1>" in index_html
+
+    def test_custom_title_in_index(self, output_dir):
+        """Test that a custom title appears in the index page."""
+        fixture_path = Path(__file__).parent / "sample_session.json"
+        generate_html(fixture_path, output_dir, title="Fix auth bug")
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        assert "<title>Fix auth bug - Index</title>" in index_html
+        assert "<h1>Fix auth bug</h1>" in index_html
+
+    def test_custom_title_in_page(self, output_dir):
+        """Test that a custom title appears in transcript pages."""
+        fixture_path = Path(__file__).parent / "sample_session.json"
+        generate_html(fixture_path, output_dir, title="Fix auth bug")
+
+        page_html = (output_dir / "page-001.html").read_text(encoding="utf-8")
+        assert "<title>Fix auth bug - page 1</title>" in page_html
+        assert "Fix auth bug</a> - page 1/" in page_html
+
+    def test_title_html_escaped(self, output_dir):
+        """Test that title is HTML-escaped to prevent XSS."""
+        fixture_path = Path(__file__).parent / "sample_session.json"
+        generate_html(fixture_path, output_dir, title='<script>alert("xss")</script>')
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        # Jinja autoescape should escape the script tag
+        assert "<script>alert" not in index_html
+        assert "&lt;script&gt;" in index_html
+
+    def test_title_xss_prevention(self, output_dir):
+        """Verify that malicious title content cannot achieve XSS.
+
+        The title variable is rendered in three HTML contexts:
+          1. <title>{{ title }} - Index</title>  (title element)
+          2. <h1>{{ title }}</h1>                 (heading element)
+          3. <a ...>{{ title }}</a>               (anchor in heading)
+
+        The primary attack vector for <title> is tag breakout: injecting
+        '</title><script>...' to escape into the document body. For <h1>
+        and <a>, it's direct <script> or event-handler injection.
+
+        Both are mitigated by Jinja2's autoescape=True on our Environment,
+        which escapes &, <, >, ", and ' in all {{ }} expressions. The title
+        variable uses plain {{ title }} with no |safe filter and is always
+        a plain str (never a Markup instance), so autoescape is fully active.
+        """
+        fixture_path = Path(__file__).parent / "sample_session.json"
+
+        # Attempt both a title-tag breakout and a direct script injection
+        malicious_title = '</title><script>alert("xss")</script>'
+        generate_html(fixture_path, output_dir, title=malicious_title)
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        page_html = (output_dir / "page-001.html").read_text(encoding="utf-8")
+
+        for html in (index_html, page_html):
+            # No raw script tag anywhere in the output
+            assert "<script>alert" not in html
+            # The breakout attempt is escaped, not interpreted as a closing tag
+            assert "</title><script>" not in html
+            # The dangerous characters are properly entity-encoded
+            assert "&lt;/title&gt;&lt;script&gt;" in html
+
+    def test_long_title_truncated(self, output_dir):
+        """Test that long titles are truncated to avoid pushing the search box off-page.
+
+        The index.html header-row is an 800px flex container shared between
+        the h1 title and the search box (~224px). At 1.5rem, titles over ~40
+        characters start wrapping. Multi-line session summaries (e.g. a prompt
+        starting with '# Role\\nYou are an expert...') are especially problematic.
+        Titles are truncated to 48 chars with ellipsis to fit comfortably.
+        """
+        fixture_path = Path(__file__).parent / "sample_session.json"
+
+        long_title = "A" * 100
+        generate_html(fixture_path, output_dir, title=long_title)
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        # Should be truncated, not the full 100-char string
+        assert "A" * 100 not in index_html
+        assert "A" * 45 + "..." in index_html
+
+    def test_multiline_title_collapsed_to_single_line(self, output_dir):
+        """Test that newlines in titles are replaced so the h1 stays on one line."""
+        fixture_path = Path(__file__).parent / "sample_session.json"
+
+        multiline_title = "# Role\nYou are an expert Software Architect"
+        generate_html(fixture_path, output_dir, title=multiline_title)
+
+        index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+        # Newlines should not appear in the h1
+        assert "# Role\nYou are" not in index_html
+        # Should be collapsed to a single line with space separator
+        assert "# Role You are" in index_html
+
+
 class TestRenderFunctions:
     """Tests for individual render functions."""
 

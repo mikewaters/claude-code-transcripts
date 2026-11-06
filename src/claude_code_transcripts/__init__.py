@@ -78,9 +78,20 @@ def extract_text_from_content(content):
 # Module-level variable for GitHub repo (set by generate_html)
 _github_repo = None
 
+MAX_TITLE_LENGTH = 48
+
 # API constants
 API_BASE_URL = "https://api.anthropic.com/v1"
 ANTHROPIC_VERSION = "2023-06-01"
+
+
+def _sanitize_title(title):
+    """Collapse whitespace and truncate a title for use in HTML headings."""
+    # Collapse newlines and runs of whitespace to a single space
+    title = " ".join(title.split())
+    if len(title) > MAX_TITLE_LENGTH:
+        title = title[: MAX_TITLE_LENGTH - 3] + "..."
+    return title
 
 
 def get_session_summary(filepath, max_length=200):
@@ -304,7 +315,11 @@ def find_all_sessions(folder, include_agents=False):
 
 
 def generate_batch_html(
-    source_folder, output_dir, include_agents=False, progress_callback=None
+    source_folder,
+    output_dir,
+    include_agents=False,
+    progress_callback=None,
+    use_session_name=False,
 ):
     """Generate HTML archive for all sessions in a Claude projects folder.
 
@@ -346,8 +361,11 @@ def generate_batch_html(
             session_dir = project_dir / session_name
 
             # Generate transcript HTML with error handling
+            kwargs = {}
+            if use_session_name:
+                kwargs["title"] = get_session_summary(session["path"], max_length=80)
             try:
-                generate_html(session["path"], session_dir)
+                generate_html(session["path"], session_dir, **kwargs)
                 successful_sessions += 1
             except Exception as e:
                 failed_sessions.append(
@@ -978,7 +996,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .container { max-width: 800px; margin: 0 auto; }
 h1 { font-size: 1.5rem; margin-bottom: 24px; padding-bottom: 8px; border-bottom: 2px solid var(--user-border); }
 .header-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 2px solid var(--user-border); padding-bottom: 8px; margin-bottom: 24px; }
-.header-row h1 { border-bottom: none; padding-bottom: 0; margin-bottom: 0; flex: 1; min-width: 200px; }
+.header-row h1 { border-bottom: none; padding-bottom: 0; margin-bottom: 0; flex: 1; min-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .message { margin-bottom: 16px; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .message.user { background: var(--user-bg); border-left: 4px solid var(--user-border); }
 .message.assistant { background: var(--card-bg); border-left: 4px solid var(--assistant-border); }
@@ -1295,7 +1313,7 @@ def generate_index_pagination_html(total_pages):
     return _macros.index_pagination(total_pages)
 
 
-def generate_html(json_path, output_dir, github_repo=None):
+def generate_html(json_path, output_dir, github_repo=None, title=None):
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True)
 
@@ -1317,6 +1335,8 @@ def generate_html(json_path, output_dir, github_repo=None):
     # Set module-level variable for render functions
     global _github_repo
     _github_repo = github_repo
+
+    title = _sanitize_title(title) if title else "Claude Code transcript"
 
     conversations = []
     current_conv = None
@@ -1374,6 +1394,7 @@ def generate_html(json_path, output_dir, github_repo=None):
         page_content = page_template.render(
             css=CSS,
             js=JS,
+            title=title,
             page_num=page_num,
             total_pages=total_pages,
             pagination_html=pagination_html,
@@ -1455,6 +1476,7 @@ def generate_html(json_path, output_dir, github_repo=None):
     index_content = index_template.render(
         css=CSS,
         js=JS,
+        title=title,
         pagination_html=index_pagination,
         prompt_num=prompt_num,
         total_messages=total_messages,
@@ -1516,7 +1538,14 @@ def cli():
     default=10,
     help="Maximum number of sessions to show (default: 10)",
 )
-def local_cmd(output, output_auto, repo, gist, include_json, open_browser, limit):
+@click.option(
+    "--use-session-name",
+    is_flag=True,
+    help="Use the session name as the page title instead of the default.",
+)
+def local_cmd(
+    output, output_auto, repo, gist, include_json, open_browser, limit, use_session_name
+):
     """Select and convert a local Claude Code session to HTML."""
     projects_folder = Path.home() / ".claude" / "projects"
 
@@ -1567,7 +1596,10 @@ def local_cmd(output, output_auto, repo, gist, include_json, open_browser, limit
         output = Path(tempfile.gettempdir()) / f"claude-session-{session_file.stem}"
 
     output = Path(output)
-    generate_html(session_file, output, github_repo=repo)
+    title = None
+    if use_session_name:
+        title = get_session_summary(session_file, max_length=80)
+    generate_html(session_file, output, github_repo=repo, title=title)
 
     # Show output directory
     click.echo(f"Output: {output.resolve()}")
@@ -1668,7 +1700,21 @@ def fetch_url_to_tempfile(url):
     is_flag=True,
     help="Open the generated index.html in your default browser (default if no -o specified).",
 )
-def json_cmd(json_file, output, output_auto, repo, gist, include_json, open_browser):
+@click.option(
+    "--use-session-name",
+    is_flag=True,
+    help="Use the session name as the page title instead of the default.",
+)
+def json_cmd(
+    json_file,
+    output,
+    output_auto,
+    repo,
+    gist,
+    include_json,
+    open_browser,
+    use_session_name,
+):
     """Convert a Claude Code session JSON/JSONL file or URL to HTML."""
     # Handle URL input
     if is_url(json_file):
@@ -1698,7 +1744,10 @@ def json_cmd(json_file, output, output_auto, repo, gist, include_json, open_brow
         )
 
     output = Path(output)
-    generate_html(json_file_path, output, github_repo=repo)
+    title = None
+    if use_session_name:
+        title = get_session_summary(json_file_path, max_length=80)
+    generate_html(json_file_path, output, github_repo=repo, title=title)
 
     # Show output directory
     click.echo(f"Output: {output.resolve()}")
@@ -1775,7 +1824,9 @@ def format_session_for_display(session_data):
     return f"{repo_display:30}  {date_display:19}  {title}"
 
 
-def generate_html_from_session_data(session_data, output_dir, github_repo=None):
+def generate_html_from_session_data(
+    session_data, output_dir, github_repo=None, title=None
+):
     """Generate HTML from session data dict (instead of file path)."""
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True, parents=True)
@@ -1791,6 +1842,8 @@ def generate_html_from_session_data(session_data, output_dir, github_repo=None):
     # Set module-level variable for render functions
     global _github_repo
     _github_repo = github_repo
+
+    title = _sanitize_title(title) if title else "Claude Code transcript"
 
     conversations = []
     current_conv = None
@@ -1848,6 +1901,7 @@ def generate_html_from_session_data(session_data, output_dir, github_repo=None):
         page_content = page_template.render(
             css=CSS,
             js=JS,
+            title=title,
             page_num=page_num,
             total_pages=total_pages,
             pagination_html=pagination_html,
@@ -1929,6 +1983,7 @@ def generate_html_from_session_data(session_data, output_dir, github_repo=None):
     index_content = index_template.render(
         css=CSS,
         js=JS,
+        title=title,
         pagination_html=index_pagination,
         prompt_num=prompt_num,
         total_messages=total_messages,
@@ -1983,6 +2038,11 @@ def generate_html_from_session_data(session_data, output_dir, github_repo=None):
     is_flag=True,
     help="Open the generated index.html in your default browser (default if no -o specified).",
 )
+@click.option(
+    "--use-session-name",
+    is_flag=True,
+    help="Use the session name as the page title instead of the default.",
+)
 def web_cmd(
     session_id,
     output,
@@ -1993,6 +2053,7 @@ def web_cmd(
     gist,
     include_json,
     open_browser,
+    use_session_name,
 ):
     """Select and convert a web session from the Claude API to HTML.
 
@@ -2068,7 +2129,10 @@ def web_cmd(
 
     output = Path(output)
     click.echo(f"Generating HTML in {output}/...")
-    generate_html_from_session_data(session_data, output, github_repo=repo)
+    title = None
+    if use_session_name:
+        title = session_data.get("title", "Untitled")
+    generate_html_from_session_data(session_data, output, github_repo=repo, title=title)
 
     # Show output directory
     click.echo(f"Output: {output.resolve()}")
@@ -2132,7 +2196,14 @@ def web_cmd(
     is_flag=True,
     help="Suppress all output except errors.",
 )
-def all_cmd(source, output, include_agents, dry_run, open_browser, quiet):
+@click.option(
+    "--use-session-name",
+    is_flag=True,
+    help="Use session summaries as page titles instead of the default.",
+)
+def all_cmd(
+    source, output, include_agents, dry_run, open_browser, quiet, use_session_name
+):
     """Convert all local Claude Code sessions to a browsable HTML archive.
 
     Creates a directory structure with:
@@ -2198,6 +2269,7 @@ def all_cmd(source, output, include_agents, dry_run, open_browser, quiet):
         output,
         include_agents=include_agents,
         progress_callback=on_progress,
+        use_session_name=use_session_name,
     )
 
     # Report any failures
